@@ -3,8 +3,7 @@ from ..extensions import db
 from ..models import Invoice
 from ..schema.invoice import InvoiceSchema
 from ..middleware.auth import require_auth, attach_tenant
-from ..services.invoice_service import build_invoice, calculate_totals, get_or_create_payment_link
-from ..services.flutterwave import FlutterwaveError
+from ..services.invoice_service import build_invoice, calculate_totals, get_bank_transfer_details
 
 invoices_bp = Blueprint("invoices", __name__)
 
@@ -93,10 +92,10 @@ def send_invoice(invoice_id):
     if not invoice:
         return jsonify({"error": "Invoice not found"}), 404
 
-    try:
-        get_or_create_payment_link(invoice)
-    except FlutterwaveError as e:
-        return jsonify({"error": f"Could not generate payment link: {e}"}), 502
+    if not get_bank_transfer_details(g.tenant):
+        return jsonify({
+            "error": "Add your bank transfer details in Settings before sending an invoice."
+        }), 422
 
     invoice.status = "SENT"
     db.session.commit()

@@ -46,7 +46,7 @@ def build_invoice(tenant_id, data):
         due_date = issue_date + timedelta(days=payment_terms)
 
     # Generate the id up front (rather than relying on the model's default)
-    # so we can also use it as a globally-unique Flutterwave tx_ref later.
+    # so it's available before the row is committed.
     invoice_id = str(uuid4())
 
     invoice = Invoice(
@@ -72,25 +72,15 @@ def build_invoice(tenant_id, data):
     return invoice
 
 
-def get_or_create_payment_link(invoice):
+def get_bank_transfer_details(tenant):
     """
-    Returns the invoice's existing payment_url if already generated,
-    otherwise requests a new one from Flutterwave and returns it.
-    Caller is responsible for committing the session afterward.
+    Returns the tenant's bank transfer details (from Settings.payment_info)
+    to display on an invoice. Payment method is manual bank transfer, so
+    there's no external API call and no payment link to generate — the
+    customer pays directly using these details, and the tenant marks the
+    invoice paid themselves once they confirm receipt.
     """
-    from .flutterwave import create_payment_link
-    from flask import current_app
-
-    if invoice.payment_url:
-        return invoice.payment_url
-
-    link = create_payment_link(
-        tx_ref=invoice.id,
-        amount=float(invoice.total),
-        currency=invoice.currency,
-        customer_email=invoice.client_email,
-        customer_name=invoice.client_name,
-        redirect_url=f"{current_app.config['FRONTEND_URL']}/invoices/{invoice.public_token}",
-    )
-    invoice.payment_url = link
-    return link
+    settings = tenant.settings
+    if not settings or not settings.payment_info:
+        return None
+    return settings.payment_info
