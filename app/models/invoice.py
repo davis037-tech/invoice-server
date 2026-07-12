@@ -35,6 +35,9 @@ class Invoice(db.Model):
     public_token       = db.Column(db.String, unique=True, nullable=True)
     payment_url = db.Column(db.String, nullable=True)
     notes              = db.Column(db.Text, nullable=True)
+    payment_proof_note      = db.Column(db.Text, nullable=True)
+    payment_proof_image     = db.Column(db.Text, nullable=True)  # base64 data URI of a receipt photo
+    payment_proof_submitted_at = db.Column(db.DateTime, nullable=True)
     created_at         = db.Column(db.DateTime, server_default=db.func.now())
     
     def to_dict(self):
@@ -59,6 +62,9 @@ class Invoice(db.Model):
           "public_token":       self.public_token,
           "payment_url":        self.payment_url,
           "notes":              self.notes,
+          "payment_proof_note":         self.payment_proof_note,
+          "payment_proof_image":        self.payment_proof_image,
+          "payment_proof_submitted_at": self.payment_proof_submitted_at.isoformat() if self.payment_proof_submitted_at else None,
           "created_at":         self.created_at.isoformat()
         }
       

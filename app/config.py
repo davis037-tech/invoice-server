@@ -7,6 +7,7 @@ class Config:
     SQLALCHEMY_DATABASE_URI         = os.getenv("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS  = False
     SECRET_KEY                      = os.getenv("SECRET_KEY")
+    MAX_CONTENT_LENGTH              = 5 * 1024 * 1024  # 5MB request cap (covers base64 receipt photos)
     JWT_SECRET_KEY                  = os.getenv("JWT_SECRET")
     FRONTEND_URL                    = os.getenv("FRONTEND_URL", "http://localhost:5173") 
     CORS_ORIGINS                    = [os.getenv("FRONTEND_URL"), "http://localhost:5173"]

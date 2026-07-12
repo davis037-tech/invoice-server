@@ -18,3 +18,13 @@ class InvoiceSchema(Schema):
     payment_terms  = fields.Int(load_default=30)
     due_date       = fields.DateTime(load_default=None)
     notes          = fields.Str(load_default=None)
+
+
+# Cap the base64 receipt image at ~3.5MB of encoded text, which covers a
+# ~2.5MB photo — generous for a phone camera shot while keeping DB rows small.
+MAX_PROOF_IMAGE_CHARS = 3_500_000
+
+
+class PaymentProofSchema(Schema):
+    note = fields.Str(load_default=None, validate=validate.Length(max=2000))
+    image_base64 = fields.Str(load_default=None, validate=validate.Length(max=MAX_PROOF_IMAGE_CHARS))

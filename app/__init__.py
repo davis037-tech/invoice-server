@@ -1,5 +1,6 @@
 from flask import Flask 
 from .extensions import db, jwt, migrate, cors
+from .db_bootstrap import ensure_invoice_columns
 from .routes.auth import auth_bp 
 from .routes.clients import clients_bp 
 from .routes.invoices import invoices_bp 
@@ -15,6 +16,8 @@ def create_app():
     migrate.init_app(app, db)
     jwt.init_app(app)
     cors.init_app(app, resources={r"/v1/*": {"origins": app.config["CORS_ORIGINS"]}})
+
+    ensure_invoice_columns(app, db)
     
     app.register_blueprint(auth_bp,    url_prefix="/v1/auth")
     app.register_blueprint(clients_bp,    url_prefix="/v1/clients")
