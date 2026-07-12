@@ -17,6 +17,7 @@ class Tenant(db.Model):
     stripe_id  = db.Column(db.String, nullable=True)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
     plan       = db.Column(SAEnum(Plan), default=Plan.FREE)
+    invoice_limit_override = db.Column(db.Integer, nullable=True)
     users      = db.relationship("User", backref="tenant", lazy=True)
     clients    = db.relationship("Client", backref="tenant", lazy=True)
     invoices   = db.relationship("Invoice", backref="tenant", lazy=True)

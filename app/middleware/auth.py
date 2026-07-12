@@ -25,3 +25,17 @@ def attach_tenant(fn):
         g.tenant = g.current_user.tenant
         return fn(*args, **kwargs)
     return wrapper
+
+
+def require_superadmin(fn):
+    """
+    Gates platform-admin routes (viewing/managing all tenants). Must be
+    stacked after @require_auth so g.current_user is already set.
+    """
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        user = getattr(g, "current_user", None)
+        if not user or not user.is_superadmin:
+            return jsonify({"error": "Admin access required"}), 403
+        return fn(*args, **kwargs)
+    return wrapper

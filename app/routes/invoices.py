@@ -4,6 +4,7 @@ from ..models import Invoice
 from ..schema.invoice import InvoiceSchema
 from ..middleware.auth import require_auth, attach_tenant
 from ..services.invoice_service import build_invoice, calculate_totals, get_bank_transfer_details
+from ..services.quota import quota_status
 
 invoices_bp = Blueprint("invoices", __name__)
 
@@ -23,10 +24,25 @@ def list_invoices():
     }), 200
 
 
+@invoices_bp.get("/quota")
+@require_auth
+@attach_tenant
+def get_quota():
+    return jsonify({"data": quota_status(g.tenant)}), 200
+
+
 @invoices_bp.post("/")
 @require_auth
 @attach_tenant
 def create_invoice():
+    status = quota_status(g.tenant)
+    if status["remaining"] <= 0:
+        return jsonify({
+            "error": f"Weekly invoice limit reached ({status['limit']} this week). "
+                     f"Upgrade your plan or contact support to raise it.",
+            "quota": status,
+        }), 403
+
     data = request.get_json()
     schema = InvoiceSchema()
     errors = schema.validate(data)

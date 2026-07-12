@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, create_refresh_token
 from marshmallow import ValidationError
 from sqlalchemy.exc import IntegrityError
@@ -7,6 +7,20 @@ from ..models import Tenant, User, Settings
 from ..schema.auth import RegisterSchema, LoginSchema
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def _sync_superadmin_flag(user):
+    """
+    Anyone logging in or registering with the email set in SUPERADMIN_EMAIL
+    gets platform-admin access. Re-checked on every login/register so
+    changing the env var takes effect without a manual DB edit.
+    """
+    superadmin_email = current_app.config.get("SUPERADMIN_EMAIL")
+    should_be_admin = bool(superadmin_email) and user.email.lower() == superadmin_email.lower()
+    if user.is_superadmin != should_be_admin:
+        user.is_superadmin = should_be_admin
+        db.session.commit()
+
 
 @auth_bp.post("/register")
 def register():
@@ -33,6 +47,8 @@ def register():
         db.session.rollback()
         return jsonify({"error": "An organization with that name already exists"}), 409
 
+    _sync_superadmin_flag(user)
+
     access   = create_access_token(identity=user.id)
     refresh  = create_refresh_token(identity=user.id)
     return jsonify({"user": user.to_dict(), "tokens": { "access": access, "refresh": refresh} }), 201
@@ -51,7 +67,7 @@ def login():
     if not user.check_password(data["password"]):
       return jsonify({"error": "Invalid password"}), 401
       
-    
+    _sync_superadmin_flag(user)
     
     access = create_access_token(identity=user.id)
     refresh = create_refresh_token(identity=user.id)
