@@ -67,7 +67,9 @@ def build_invoice(tenant_id, data):
         due_date=due_date,
         payment_terms=payment_terms,
         notes=data.get("notes"),
-        public_token=secrets.token_urlsafe(24),
+        # 9 random bytes ~ 12 url-safe characters — short enough to share
+        # comfortably, still far too many combinations to brute-force guess.
+        public_token=secrets.token_urlsafe(9),
     )
     return invoice
 
