@@ -74,13 +74,36 @@ def build_invoice(tenant_id, data):
 
 def get_bank_transfer_details(tenant):
     """
-    Returns the tenant's bank transfer details (from Settings.payment_info)
-    to display on an invoice. Payment method is manual bank transfer, so
-    there's no external API call and no payment link to generate — the
-    customer pays directly using these details, and the tenant marks the
-    invoice paid themselves once they confirm receipt.
+    Returns the tenant's bank transfer details, formatted for display on an
+    invoice. Payment method is manual bank transfer, so there's no external
+    API call and no payment link to generate — the customer pays directly
+    using these details, and the tenant marks the invoice paid themselves
+    once they confirm receipt (or after reviewing submitted proof).
+
+    Prefers the structured fields (bank_name, account_name, etc.) added
+    after the free-text payment_info field; falls back to that legacy
+    field for any tenant who saved details before the structured fields
+    existed and hasn't touched Settings since.
     """
     settings = tenant.settings
-    if not settings or not settings.payment_info:
+    if not settings:
         return None
-    return settings.payment_info
+
+    lines = []
+    if settings.bank_name:
+        lines.append(f"Bank: {settings.bank_name}")
+    if settings.account_name:
+        lines.append(f"Account name: {settings.account_name}")
+    if settings.account_number:
+        lines.append(f"Account number: {settings.account_number}")
+    if settings.routing_number:
+        lines.append(f"Routing/IBAN: {settings.routing_number}")
+    if settings.swift_code:
+        lines.append(f"SWIFT/BIC: {settings.swift_code}")
+    if settings.payment_notes:
+        lines.append(settings.payment_notes)
+
+    if lines:
+        return "\n".join(lines)
+
+    return settings.payment_info or None

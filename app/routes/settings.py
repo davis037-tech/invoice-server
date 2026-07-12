@@ -12,6 +12,12 @@ ALLOWED_FIELDS = (
     "currency",
     "tax_rate",
     "payment_info",
+    "bank_name",
+    "account_name",
+    "account_number",
+    "routing_number",
+    "swift_code",
+    "payment_notes",
 )
 
 

@@ -25,6 +25,15 @@ NEW_USER_COLUMNS = {
     "is_superadmin": "BOOLEAN DEFAULT FALSE NOT NULL",
 }
 
+NEW_SETTINGS_COLUMNS = {
+    "bank_name": "VARCHAR",
+    "account_name": "VARCHAR",
+    "account_number": "VARCHAR",
+    "routing_number": "VARCHAR",
+    "swift_code": "VARCHAR",
+    "payment_notes": "TEXT",
+}
+
 
 def _add_missing_columns(app, db, table_name, new_columns):
     try:
@@ -53,3 +62,8 @@ def ensure_tenant_and_user_columns(app, db):
     with app.app_context():
         _add_missing_columns(app, db, "tenants", NEW_TENANT_COLUMNS)
         _add_missing_columns(app, db, "users", NEW_USER_COLUMNS)
+
+
+def ensure_settings_columns(app, db):
+    with app.app_context():
+        _add_missing_columns(app, db, "settings", NEW_SETTINGS_COLUMNS)
