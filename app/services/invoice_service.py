@@ -96,6 +96,9 @@ def refresh_overdue_status(invoices):
     if changed:
         db.session.commit()
     return items[0] if single else items
+
+
+def get_bank_transfer_details(tenant):
     """
     Returns the tenant's bank transfer details, formatted for display on an
     invoice. Payment method is manual bank transfer, so there's no external
