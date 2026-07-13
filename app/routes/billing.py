@@ -1,3 +1,4 @@
+from datetime import datetime
 from flask import Blueprint, jsonify, g
 from ..extensions import db
 from ..models import Invoice
@@ -40,6 +41,7 @@ def mark_invoice_paid(invoice_id):
         return jsonify({"data": invoice.to_dict()}), 200
 
     invoice.status = "PAID"
+    invoice.paid_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"data": invoice.to_dict()}), 200
 

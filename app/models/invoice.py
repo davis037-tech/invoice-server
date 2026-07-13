@@ -38,6 +38,8 @@ class Invoice(db.Model):
     payment_proof_note      = db.Column(db.Text, nullable=True)
     payment_proof_image     = db.Column(db.Text, nullable=True)  # base64 data URI of a receipt photo
     payment_proof_submitted_at = db.Column(db.DateTime, nullable=True)
+    paid_at            = db.Column(db.DateTime, nullable=True)
+    last_reminder_sent_at = db.Column(db.DateTime, nullable=True)
     created_at         = db.Column(db.DateTime, server_default=db.func.now())
     
     def to_dict(self):
@@ -65,6 +67,8 @@ class Invoice(db.Model):
           "payment_proof_note":         self.payment_proof_note,
           "payment_proof_image":        self.payment_proof_image,
           "payment_proof_submitted_at": self.payment_proof_submitted_at.isoformat() if self.payment_proof_submitted_at else None,
+          "paid_at":            self.paid_at.isoformat() if self.paid_at else None,
+          "last_reminder_sent_at": self.last_reminder_sent_at.isoformat() if self.last_reminder_sent_at else None,
           "created_at":         self.created_at.isoformat()
         }
       

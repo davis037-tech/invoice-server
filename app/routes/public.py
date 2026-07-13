@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request
 from ..extensions import db
 from ..models import Invoice
 from ..schema.invoice import PaymentProofSchema
+from ..services.invoice_service import refresh_overdue_status, get_bank_transfer_details
 
 public_bp = Blueprint("public", __name__)
 
@@ -12,10 +13,10 @@ def get_public_invoice(public_token):
     invoice = Invoice.query.filter_by(public_token=public_token).first()
     if not invoice:
         return jsonify({"error": "Invoice not found"}), 404
+    invoice = refresh_overdue_status(invoice)
 
     data = invoice.to_dict()
-    settings = invoice.tenant.settings
-    data["bank_transfer_details"] = settings.payment_info if settings else None
+    data["bank_transfer_details"] = get_bank_transfer_details(invoice.tenant)
     return jsonify({"data": data}), 200
 
 
@@ -44,6 +45,5 @@ def submit_payment_proof(public_token):
     db.session.commit()
 
     data = invoice.to_dict()
-    settings = invoice.tenant.settings
-    data["bank_transfer_details"] = settings.payment_info if settings else None
+    data["bank_transfer_details"] = get_bank_transfer_details(invoice.tenant)
     return jsonify({"data": data}), 200

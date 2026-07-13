@@ -1,20 +1,28 @@
 from datetime import datetime, timedelta
-from ..models import Invoice
+from ..models import Invoice, PlanLimit
 
-# Default weekly invoice quota per plan tier. A tenant's actual limit is
-# this value unless an admin has set invoice_limit_override, which always
-# wins (used to grant a one-off bump or a custom deal).
-PLAN_WEEKLY_LIMITS = {
+# Fallback defaults if the plan_limits table is somehow empty (shouldn't
+# happen — db_bootstrap seeds it on startup). Admins edit the real values
+# from the Admin panel; these are just a safety net.
+DEFAULT_PLAN_WEEKLY_LIMITS = {
     "FREE": 5,
     "PRO": 25,
     "TEAM": 100,
 }
 
 
+def all_plan_limits():
+    rows = {row.plan: row.weekly_limit for row in PlanLimit.query.all()}
+    return {plan: rows.get(plan, default) for plan, default in DEFAULT_PLAN_WEEKLY_LIMITS.items()}
+
+
 def weekly_limit_for(tenant):
     if tenant.invoice_limit_override is not None:
         return tenant.invoice_limit_override
-    return PLAN_WEEKLY_LIMITS.get(tenant.plan.value, PLAN_WEEKLY_LIMITS["FREE"])
+    row = PlanLimit.query.get(tenant.plan.value)
+    if row:
+        return row.weekly_limit
+    return DEFAULT_PLAN_WEEKLY_LIMITS.get(tenant.plan.value, DEFAULT_PLAN_WEEKLY_LIMITS["FREE"])
 
 
 def invoices_created_this_week(tenant):

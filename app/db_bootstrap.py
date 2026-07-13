@@ -15,6 +15,8 @@ NEW_INVOICE_COLUMNS = {
     "payment_proof_note": "TEXT",
     "payment_proof_image": "TEXT",
     "payment_proof_submitted_at": "TIMESTAMP",
+    "paid_at": "TIMESTAMP",
+    "last_reminder_sent_at": "TIMESTAMP",
 }
 
 NEW_TENANT_COLUMNS = {
@@ -67,3 +69,25 @@ def ensure_tenant_and_user_columns(app, db):
 def ensure_settings_columns(app, db):
     with app.app_context():
         _add_missing_columns(app, db, "settings", NEW_SETTINGS_COLUMNS)
+
+
+def ensure_plan_limits_seeded(app, db):
+    """
+    Creates the plan_limits table if it doesn't exist yet (it's a brand
+    new model, so plain db.create_all() handles new tables — this only
+    needs to run once) and seeds it with default weekly quotas so the
+    app has sensible values before an admin ever visits the Admin panel.
+    """
+    from .models import PlanLimit
+
+    with app.app_context():
+        try:
+            db.create_all()  # only creates tables that don't exist yet — safe no-op otherwise
+            defaults = {"FREE": 5, "PRO": 25, "TEAM": 100}
+            existing = {row.plan for row in PlanLimit.query.all()}
+            for plan, limit in defaults.items():
+                if plan not in existing:
+                    db.session.add(PlanLimit(plan=plan, weekly_limit=limit))
+            db.session.commit()
+        except Exception as e:
+            app.logger.error(f"ensure_plan_limits_seeded failed: {e}")

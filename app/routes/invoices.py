@@ -3,7 +3,7 @@ from ..extensions import db
 from ..models import Invoice
 from ..schema.invoice import InvoiceSchema
 from ..middleware.auth import require_auth, attach_tenant
-from ..services.invoice_service import build_invoice, calculate_totals, get_bank_transfer_details
+from ..services.invoice_service import build_invoice, calculate_totals, get_bank_transfer_details, refresh_overdue_status
 from ..services.quota import quota_status
 
 invoices_bp = Blueprint("invoices", __name__)
@@ -18,6 +18,7 @@ def list_invoices():
     if status:
         query = query.filter_by(status=status.upper())
     invoices = query.order_by(Invoice.created_at.desc()).all()
+    invoices = refresh_overdue_status(invoices)
     return jsonify({
         "data": [inv.to_dict() for inv in invoices],
         "meta": {"total": len(invoices)}
@@ -63,6 +64,7 @@ def get_invoice(invoice_id):
     invoice = Invoice.query.filter_by(id=invoice_id, tenant_id=g.tenant.id).first()
     if not invoice:
         return jsonify({"error": "Invoice not found"}), 404
+    invoice = refresh_overdue_status(invoice)
     return jsonify({"data": invoice.to_dict()}), 200
 
 

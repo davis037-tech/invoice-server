@@ -13,6 +13,14 @@ class Config:
     # Any account logging in/registering with this email is automatically
     # granted platform-admin access. Set this on Render, not committed here.
     SUPERADMIN_EMAIL                = os.getenv("SUPERADMIN_EMAIL")
+    # Email — used for automatic overdue payment reminders.
+    RESEND_API_KEY                  = os.getenv("RESEND_API_KEY")
+    RESEND_FROM_EMAIL               = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+    # Secret the external cron trigger must send to run scheduled jobs
+    # (there's no built-in scheduler on this host, so an outside service
+    # hits our endpoint on a timer — this secret stops randoms from
+    # triggering it themselves).
+    CRON_SECRET                     = os.getenv("CRON_SECRET")
     CORS_ORIGINS                    = [os.getenv("FRONTEND_URL"), "http://localhost:5173"]
     
 

@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, g
 from ..extensions import db
-from ..models import Tenant, User, Invoice
+from ..models import Tenant, User, Invoice, PlanLimit
 from ..middleware.auth import require_auth, require_superadmin
-from ..services.quota import quota_status, PLAN_WEEKLY_LIMITS
+from ..services.quota import quota_status, all_plan_limits, DEFAULT_PLAN_WEEKLY_LIMITS
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -22,6 +22,38 @@ def platform_stats():
             "total_invoices": Invoice.query.count(),
         }
     }), 200
+
+
+@admin_bp.get("/plan-limits")
+@require_auth
+@require_superadmin
+def get_plan_limits():
+    return jsonify({"data": all_plan_limits()}), 200
+
+
+@admin_bp.put("/plan-limits")
+@require_auth
+@require_superadmin
+def update_plan_limits():
+    """
+    Body: { "FREE": 5, "PRO": 25, "TEAM": 100 } — any subset of plans.
+    These are the defaults every tenant on that plan gets, unless that
+    specific tenant has an invoice_limit_override set.
+    """
+    data = request.get_json() or {}
+    valid_plans = set(DEFAULT_PLAN_WEEKLY_LIMITS.keys())
+    for plan, limit in data.items():
+        if plan not in valid_plans:
+            return jsonify({"error": f"Invalid plan '{plan}'. Choose from {list(valid_plans)}"}), 422
+        if not isinstance(limit, int) or limit < 0:
+            return jsonify({"error": f"weekly_limit for {plan} must be a non-negative integer"}), 422
+        row = PlanLimit.query.get(plan)
+        if row:
+            row.weekly_limit = limit
+        else:
+            db.session.add(PlanLimit(plan=plan, weekly_limit=limit))
+    db.session.commit()
+    return jsonify({"data": all_plan_limits()}), 200
 
 
 @admin_bp.get("/tenants")
@@ -44,7 +76,7 @@ def list_tenants():
             "total_invoices": Invoice.query.filter_by(tenant_id=t.id).count(),
             "created_at": t.created_at.isoformat(),
         })
-    return jsonify({"data": data, "meta": {"total": len(data), "plans": list(PLAN_WEEKLY_LIMITS.keys())}}), 200
+    return jsonify({"data": data, "meta": {"total": len(data), "plans": list(DEFAULT_PLAN_WEEKLY_LIMITS.keys())}}), 200
 
 
 @admin_bp.put("/tenants/<tenant_id>")
@@ -58,8 +90,8 @@ def update_tenant(tenant_id):
     data = request.get_json() or {}
 
     if "plan" in data:
-        if data["plan"] not in PLAN_WEEKLY_LIMITS:
-            return jsonify({"error": f"Invalid plan. Choose one of {list(PLAN_WEEKLY_LIMITS.keys())}"}), 422
+        if data["plan"] not in DEFAULT_PLAN_WEEKLY_LIMITS:
+            return jsonify({"error": f"Invalid plan. Choose one of {list(DEFAULT_PLAN_WEEKLY_LIMITS.keys())}"}), 422
         tenant.plan = data["plan"]
 
     if "invoice_limit_override" in data:

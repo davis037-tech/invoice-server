@@ -2,6 +2,7 @@ import secrets
 from uuid import uuid4
 from datetime import datetime, timedelta
 
+from ..extensions import db
 from ..models import Invoice, Client
 
 
@@ -74,7 +75,27 @@ def build_invoice(tenant_id, data):
     return invoice
 
 
-def get_bank_transfer_details(tenant):
+def refresh_overdue_status(invoices):
+    """
+    Flips any SENT invoice whose due_date has passed to OVERDUE. Runs
+    lazily whenever invoices are read (list/detail/public view) rather
+    than on a schedule — there's no background worker running, so this
+    is what keeps status accurate without needing one. Accepts either a
+    single Invoice or a list; always returns a list. Caller must still
+    commit (all read routes already do, or the change is harmless to
+    leave uncommitted until the next write).
+    """
+    single = not isinstance(invoices, (list, tuple))
+    items = [invoices] if single else invoices
+    now = datetime.utcnow()
+    changed = False
+    for inv in items:
+        if inv and inv.status.value == "SENT" and inv.due_date and inv.due_date < now:
+            inv.status = "OVERDUE"
+            changed = True
+    if changed:
+        db.session.commit()
+    return items[0] if single else items
     """
     Returns the tenant's bank transfer details, formatted for display on an
     invoice. Payment method is manual bank transfer, so there's no external
