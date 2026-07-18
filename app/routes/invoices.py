@@ -76,6 +76,11 @@ def update_invoice(invoice_id):
     if not invoice:
         return jsonify({"error": "Invoice not found"}), 404
 
+    if invoice.status.value != "DRAFT":
+        return jsonify({
+            "error": "Only draft invoices can be edited. This one has already been sent to the client."
+        }), 400
+
     data = request.get_json()
     schema = InvoiceSchema(partial=True)
     errors = schema.validate(data)
@@ -127,6 +132,33 @@ def delete_invoice(invoice_id):
     invoice = Invoice.query.filter_by(id=invoice_id, tenant_id=g.tenant.id).first()
     if not invoice:
         return jsonify({"error": "Invoice not found"}), 404
+
+    if invoice.status.value != "DRAFT":
+        return jsonify({
+            "error": "Only draft invoices can be deleted. This one has already been sent — "
+                     "cancel it instead to keep the record."
+        }), 400
+
     db.session.delete(invoice)
     db.session.commit()
     return "", 204
+
+
+@invoices_bp.post("/<invoice_id>/cancel")
+@require_auth
+@attach_tenant
+def cancel_invoice(invoice_id):
+    """
+    For invoices that have already been sent (or gone overdue) — voids it
+    without erasing the record, unlike delete which only works on drafts.
+    """
+    invoice = Invoice.query.filter_by(id=invoice_id, tenant_id=g.tenant.id).first()
+    if not invoice:
+        return jsonify({"error": "Invoice not found"}), 404
+
+    if invoice.status.value in ("PAID", "CANCELLED"):
+        return jsonify({"error": f"Invoice is already {invoice.status.value.lower()}."}), 400
+
+    invoice.status = "CANCELLED"
+    db.session.commit()
+    return jsonify({"data": invoice.to_dict()}), 200
