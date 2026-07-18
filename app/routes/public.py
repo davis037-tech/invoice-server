@@ -8,6 +8,14 @@ from ..services.invoice_service import refresh_overdue_status, get_bank_transfer
 public_bp = Blueprint("public", __name__)
 
 
+def _supplier_info(tenant):
+    settings = tenant.settings
+    return {
+        "business_name": (settings.business_name if settings else None) or tenant.name,
+        "business_address": settings.business_address if settings else None,
+    }
+
+
 @public_bp.get("/invoices/<public_token>")
 def get_public_invoice(public_token):
     invoice = Invoice.query.filter_by(public_token=public_token).first()
@@ -17,6 +25,7 @@ def get_public_invoice(public_token):
 
     data = invoice.to_dict()
     data["bank_transfer_details"] = get_bank_transfer_details(invoice.tenant)
+    data["supplier"] = _supplier_info(invoice.tenant)
     return jsonify({"data": data}), 200
 
 
@@ -46,4 +55,5 @@ def submit_payment_proof(public_token):
 
     data = invoice.to_dict()
     data["bank_transfer_details"] = get_bank_transfer_details(invoice.tenant)
+    data["supplier"] = _supplier_info(invoice.tenant)
     return jsonify({"data": data}), 200
