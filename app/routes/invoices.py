@@ -1,10 +1,12 @@
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, Response
 from ..extensions import db
-from ..models import Invoice
+from ..models import Invoice, PdfDownload
 from ..schema.invoice import InvoiceSchema
 from ..middleware.auth import require_auth, attach_tenant
 from ..services.invoice_service import build_invoice, calculate_totals, get_bank_transfer_details, refresh_overdue_status
 from ..services.quota import quota_status
+from ..services.pdf_quota import pdf_quota_status
+from ..services.pdf_service import generate_invoice_pdf
 
 invoices_bp = Blueprint("invoices", __name__)
 
@@ -55,6 +57,51 @@ def create_invoice():
     db.session.add(invoice)
     db.session.commit()
     return jsonify({"data": invoice.to_dict()}), 201
+
+
+@invoices_bp.get("/pdf-quota")
+@require_auth
+@attach_tenant
+def get_pdf_quota():
+    return jsonify({"data": pdf_quota_status(g.tenant)}), 200
+
+
+@invoices_bp.get("/<invoice_id>/pdf")
+@require_auth
+@attach_tenant
+def download_invoice_pdf(invoice_id):
+    invoice = Invoice.query.filter_by(id=invoice_id, tenant_id=g.tenant.id).first()
+    if not invoice:
+        return jsonify({"error": "Invoice not found"}), 404
+
+    status = pdf_quota_status(g.tenant)
+    if status["remaining"] <= 0:
+        return jsonify({
+            "error": f"Weekly PDF download limit reached ({status['limit']} this week). "
+                     f"Upgrade your plan or contact support to raise it.",
+            "quota": status,
+        }), 403
+
+    settings = g.tenant.settings
+    supplier = {
+        "business_name": (settings.business_name if settings else None) or g.tenant.name,
+        "business_address": settings.business_address if settings else None,
+    }
+    frontend_url = None
+    from flask import current_app
+    frontend_url = current_app.config.get("FRONTEND_URL", "").rstrip("/")
+    public_url = f"{frontend_url}/i.html?token={invoice.public_token}" if invoice.public_token else None
+
+    pdf_bytes = generate_invoice_pdf(invoice, supplier, public_url)
+
+    db.session.add(PdfDownload(tenant_id=g.tenant.id, invoice_id=invoice.id))
+    db.session.commit()
+
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{invoice.number}.pdf"'},
+    )
 
 
 @invoices_bp.get("/<invoice_id>")

@@ -43,3 +43,26 @@ def overdue_reminder_email(invoice, public_url):
       payment confirmation at the link above so we can mark it received.</p>
     """
     return send_email(invoice.client_email, subject, html)
+
+
+def payment_proof_submitted_email(owner_email, invoice, review_url):
+    """Notifies the tenant owner that a client submitted payment confirmation, awaiting review."""
+    subject = f"Payment confirmation submitted for {invoice.number}"
+    html = f"""
+      <p>{invoice.client_name} submitted payment confirmation for
+      invoice <strong>{invoice.number}</strong> ({invoice.total} {invoice.currency}).</p>
+      <p><a href="{review_url}">Review and confirm on Ledger</a></p>
+    """
+    return send_email(owner_email, subject, html)
+
+
+def payment_received_email(invoice):
+    """Sends a receipt to the client once the invoice is marked paid."""
+    subject = f"Payment received — Invoice {invoice.number}"
+    html = f"""
+      <p>Hi {invoice.client_name},</p>
+      <p>This confirms we've received your payment of
+      <strong>{invoice.total} {invoice.currency}</strong> for invoice
+      <strong>{invoice.number}</strong>. Thank you!</p>
+    """
+    return send_email(invoice.client_email, subject, html)

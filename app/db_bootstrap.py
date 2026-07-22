@@ -21,6 +21,7 @@ NEW_INVOICE_COLUMNS = {
 
 NEW_TENANT_COLUMNS = {
     "invoice_limit_override": "INTEGER",
+    "pdf_limit_override": "INTEGER",
 }
 
 NEW_USER_COLUMNS = {
@@ -91,3 +92,24 @@ def ensure_plan_limits_seeded(app, db):
             db.session.commit()
         except Exception as e:
             app.logger.error(f"ensure_plan_limits_seeded failed: {e}")
+
+
+def ensure_pdf_tables_seeded(app, db):
+    """
+    Creates pdf_downloads and pdf_plan_limits (both brand new models —
+    db.create_all() only touches tables that don't exist yet) and seeds
+    default weekly PDF download quotas per plan.
+    """
+    from .models import PdfPlanLimit
+
+    with app.app_context():
+        try:
+            db.create_all()
+            defaults = {"FREE": 3, "PRO": 20, "TEAM": 100}
+            existing = {row.plan for row in PdfPlanLimit.query.all()}
+            for plan, limit in defaults.items():
+                if plan not in existing:
+                    db.session.add(PdfPlanLimit(plan=plan, weekly_limit=limit))
+            db.session.commit()
+        except Exception as e:
+            app.logger.error(f"ensure_pdf_tables_seeded failed: {e}")

@@ -1,6 +1,6 @@
 from flask import Flask 
 from .extensions import db, jwt, migrate, cors
-from .db_bootstrap import ensure_invoice_columns, ensure_tenant_and_user_columns, ensure_settings_columns, ensure_plan_limits_seeded
+from .db_bootstrap import ensure_invoice_columns, ensure_tenant_and_user_columns, ensure_settings_columns, ensure_plan_limits_seeded, ensure_pdf_tables_seeded
 from .routes.auth import auth_bp 
 from .routes.clients import clients_bp 
 from .routes.invoices import invoices_bp 
@@ -23,6 +23,7 @@ def create_app():
     ensure_tenant_and_user_columns(app, db)
     ensure_settings_columns(app, db)
     ensure_plan_limits_seeded(app, db)
+    ensure_pdf_tables_seeded(app, db)
     
     app.register_blueprint(auth_bp,    url_prefix="/v1/auth")
     app.register_blueprint(clients_bp,    url_prefix="/v1/clients")

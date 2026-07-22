@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, g
 from ..extensions import db
-from ..models import Tenant, User, Invoice, PlanLimit
+from ..models import Tenant, User, Invoice, PlanLimit, PdfPlanLimit
 from ..middleware.auth import require_auth, require_superadmin
 from ..services.quota import quota_status, all_plan_limits, DEFAULT_PLAN_WEEKLY_LIMITS
+from ..services.pdf_quota import pdf_quota_status, all_pdf_plan_limits, DEFAULT_PDF_WEEKLY_LIMITS
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -56,6 +57,33 @@ def update_plan_limits():
     return jsonify({"data": all_plan_limits()}), 200
 
 
+@admin_bp.get("/pdf-plan-limits")
+@require_auth
+@require_superadmin
+def get_pdf_plan_limits():
+    return jsonify({"data": all_pdf_plan_limits()}), 200
+
+
+@admin_bp.put("/pdf-plan-limits")
+@require_auth
+@require_superadmin
+def update_pdf_plan_limits():
+    data = request.get_json() or {}
+    valid_plans = set(DEFAULT_PDF_WEEKLY_LIMITS.keys())
+    for plan, limit in data.items():
+        if plan not in valid_plans:
+            return jsonify({"error": f"Invalid plan '{plan}'. Choose from {list(valid_plans)}"}), 422
+        if not isinstance(limit, int) or limit < 0:
+            return jsonify({"error": f"weekly_limit for {plan} must be a non-negative integer"}), 422
+        row = PdfPlanLimit.query.get(plan)
+        if row:
+            row.weekly_limit = limit
+        else:
+            db.session.add(PdfPlanLimit(plan=plan, weekly_limit=limit))
+    db.session.commit()
+    return jsonify({"data": all_pdf_plan_limits()}), 200
+
+
 @admin_bp.get("/tenants")
 @require_auth
 @require_superadmin
@@ -65,6 +93,7 @@ def list_tenants():
     for t in tenants:
         owner = User.query.filter_by(tenant_id=t.id).order_by(User.created_at.asc()).first()
         status = quota_status(t)
+        pdf_status = pdf_quota_status(t)
         data.append({
             "id": t.id,
             "name": t.name,
@@ -73,6 +102,9 @@ def list_tenants():
             "invoice_limit_override": t.invoice_limit_override,
             "weekly_limit": status["limit"],
             "weekly_used": status["used"],
+            "pdf_limit_override": t.pdf_limit_override,
+            "pdf_weekly_limit": pdf_status["limit"],
+            "pdf_weekly_used": pdf_status["used"],
             "total_invoices": Invoice.query.filter_by(tenant_id=t.id).count(),
             "created_at": t.created_at.isoformat(),
         })
@@ -100,8 +132,15 @@ def update_tenant(tenant_id):
             return jsonify({"error": "invoice_limit_override must be a non-negative integer or null"}), 422
         tenant.invoice_limit_override = value
 
+    if "pdf_limit_override" in data:
+        value = data["pdf_limit_override"]
+        if value is not None and (not isinstance(value, int) or value < 0):
+            return jsonify({"error": "pdf_limit_override must be a non-negative integer or null"}), 422
+        tenant.pdf_limit_override = value
+
     db.session.commit()
     status = quota_status(tenant)
+    pdf_status = pdf_quota_status(tenant)
     return jsonify({
         "data": {
             "id": tenant.id,
@@ -110,5 +149,8 @@ def update_tenant(tenant_id):
             "invoice_limit_override": tenant.invoice_limit_override,
             "weekly_limit": status["limit"],
             "weekly_used": status["used"],
+            "pdf_limit_override": tenant.pdf_limit_override,
+            "pdf_weekly_limit": pdf_status["limit"],
+            "pdf_weekly_used": pdf_status["used"],
         }
     }), 200

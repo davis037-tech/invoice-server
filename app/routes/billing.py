@@ -1,8 +1,9 @@
 from datetime import datetime
-from flask import Blueprint, jsonify, g
+from flask import Blueprint, jsonify, g, current_app
 from ..extensions import db
 from ..models import Invoice
 from ..middleware.auth import require_auth, attach_tenant
+from ..services.email_service import payment_received_email, EmailError
 
 billing_bp = Blueprint("billing", __name__)
 
@@ -43,6 +44,13 @@ def mark_invoice_paid(invoice_id):
     invoice.status = "PAID"
     invoice.paid_at = datetime.utcnow()
     db.session.commit()
+
+    try:
+        if current_app.config.get("RESEND_API_KEY"):
+            payment_received_email(invoice)
+    except EmailError as e:
+        current_app.logger.error(f"payment_received_email failed: {e}")
+
     return jsonify({"data": invoice.to_dict()}), 200
 
 

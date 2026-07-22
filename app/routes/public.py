@@ -1,9 +1,10 @@
 from datetime import datetime
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from ..extensions import db
-from ..models import Invoice
+from ..models import Invoice, User
 from ..schema.invoice import PaymentProofSchema
 from ..services.invoice_service import refresh_overdue_status, get_bank_transfer_details
+from ..services.email_service import payment_proof_submitted_email, EmailError
 
 public_bp = Blueprint("public", __name__)
 
@@ -52,6 +53,17 @@ def submit_payment_proof(public_token):
     invoice.payment_proof_image = loaded.get("image_base64")
     invoice.payment_proof_submitted_at = datetime.utcnow()
     db.session.commit()
+
+    # Best-effort: notify the tenant owner so they know to review it. Never
+    # let an email hiccup block the client's submission from succeeding.
+    try:
+        owner = User.query.filter_by(tenant_id=invoice.tenant_id).order_by(User.created_at.asc()).first()
+        if owner and current_app.config.get("RESEND_API_KEY"):
+            frontend_url = current_app.config.get("FRONTEND_URL", "").rstrip("/")
+            review_url = f"{frontend_url}/invoice-detail.html?id={invoice.id}"
+            payment_proof_submitted_email(owner.email, invoice, review_url)
+    except EmailError as e:
+        current_app.logger.error(f"payment_proof_submitted_email failed: {e}")
 
     data = invoice.to_dict()
     data["bank_transfer_details"] = get_bank_transfer_details(invoice.tenant)
