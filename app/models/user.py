@@ -19,6 +19,7 @@ class User(db.Model):
     password_hash  = db.Column(db.String, nullable=False)
     role           = db.Column(SAEnum(Role), default=Role.MEMBER)
     is_superadmin  = db.Column(db.Boolean, default=False, nullable=False)
+    last_login_at  = db.Column(db.DateTime, nullable=True)
     created_at     = db.Column(db.DateTime, server_default=db.func.now())
     
     
@@ -35,6 +36,7 @@ class User(db.Model):
           "role":         self.role.value,
           "tenant_id":    self.tenant_id,
           "is_superadmin": self.is_superadmin,
+          "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,
           "created_at":   self.created_at.isoformat()
         }
 

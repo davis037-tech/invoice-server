@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, g
 from ..extensions import db
-from ..models import Tenant, User, Invoice, PlanLimit, PdfPlanLimit
+from ..models import Tenant, User, Invoice, PlanLimit, PdfPlanLimit, LoginEvent
 from ..middleware.auth import require_auth, require_superadmin
 from ..services.quota import quota_status, all_plan_limits, DEFAULT_PLAN_WEEKLY_LIMITS
 from ..services.pdf_quota import pdf_quota_status, all_pdf_plan_limits, DEFAULT_PDF_WEEKLY_LIMITS
@@ -82,6 +82,52 @@ def update_pdf_plan_limits():
             db.session.add(PdfPlanLimit(plan=plan, weekly_limit=limit))
     db.session.commit()
     return jsonify({"data": all_pdf_plan_limits()}), 200
+
+
+@admin_bp.get("/login-activity")
+@require_auth
+@require_superadmin
+def login_activity():
+    """
+    Returns a 7-day daily breakdown (login count + unique users per day)
+    plus the most recent individual login events, so the admin panel can
+    show both "who's logging in daily/weekly" and the raw list.
+    """
+    now = datetime.utcnow()
+    since_week = now - timedelta(days=7)
+
+    events = LoginEvent.query.filter(LoginEvent.created_at >= since_week) \
+        .order_by(LoginEvent.created_at.desc()).all()
+
+    daily = {}
+    for i in range(7):
+        day = (now - timedelta(days=i)).date()
+        daily[day.isoformat()] = {"date": day.isoformat(), "count": 0, "users": set()}
+
+    for e in events:
+        day_key = e.created_at.date().isoformat()
+        if day_key in daily:
+            daily[day_key]["count"] += 1
+            daily[day_key]["users"].add(e.email)
+
+    daily_list = sorted(daily.values(), key=lambda d: d["date"])
+    daily_list = [{"date": d["date"], "count": d["count"], "unique_users": len(d["users"])} for d in daily_list]
+
+    recent = [{
+        "email": e.email,
+        "tenant_name": e.tenant_name,
+        "created_at": e.created_at.isoformat(),
+    } for e in events[:200]]
+
+    today_key = now.date().isoformat()
+    return jsonify({
+        "data": {
+            "daily": daily_list,
+            "recent": recent,
+            "unique_today": len({e.email for e in events if e.created_at.date().isoformat() == today_key}),
+            "unique_this_week": len({e.email for e in events}),
+        }
+    }), 200
 
 
 @admin_bp.get("/tenants")

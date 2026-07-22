@@ -26,6 +26,7 @@ NEW_TENANT_COLUMNS = {
 
 NEW_USER_COLUMNS = {
     "is_superadmin": "BOOLEAN DEFAULT FALSE NOT NULL",
+    "last_login_at": "TIMESTAMP",
 }
 
 NEW_SETTINGS_COLUMNS = {

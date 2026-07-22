@@ -1,12 +1,24 @@
+from datetime import datetime
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, create_refresh_token
 from marshmallow import ValidationError
 from sqlalchemy.exc import IntegrityError
 from ..extensions import db
-from ..models import Tenant, User, Settings
+from ..models import Tenant, User, Settings, LoginEvent
 from ..schema.auth import RegisterSchema, LoginSchema
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def _log_login(user):
+    user.last_login_at = datetime.utcnow()
+    db.session.add(LoginEvent(
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        email=user.email,
+        tenant_name=user.tenant.name if user.tenant else None,
+    ))
+    db.session.commit()
 
 
 def _sync_superadmin_flag(user):
@@ -68,6 +80,7 @@ def login():
       return jsonify({"error": "Invalid password"}), 401
       
     _sync_superadmin_flag(user)
+    _log_login(user)
     
     access = create_access_token(identity=user.id)
     refresh = create_refresh_token(identity=user.id)

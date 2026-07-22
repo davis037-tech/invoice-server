@@ -6,6 +6,7 @@ from .settings import Settings
 from .plan_limit import PlanLimit
 from .pdf_download import PdfDownload
 from .pdf_plan_limit import PdfPlanLimit
+from .login_event import LoginEvent
 
 
 
