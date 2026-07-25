@@ -21,7 +21,18 @@ class Config:
     # hits our endpoint on a timer — this secret stops randoms from
     # triggering it themselves).
     CRON_SECRET                     = os.getenv("CRON_SECRET")
-    CORS_ORIGINS                    = [os.getenv("FRONTEND_URL"), "http://localhost:5173"]
+    # FRONTEND_URL is the *primary* frontend — used when generating links
+    # sent in emails/PDFs (there can only be one canonical link). If you're
+    # running more than one frontend deployment (e.g. Netlify + Render)
+    # against the same backend, list the extra ones here, comma-separated,
+    # so CORS allows requests from all of them. FRONTEND_URL is always
+    # included automatically — no need to repeat it here.
+    _extra_origins                  = os.getenv("FRONTEND_URLS", "")
+    CORS_ORIGINS                    = list(dict.fromkeys(filter(None, [
+        os.getenv("FRONTEND_URL"),
+        *[o.strip() for o in _extra_origins.split(",") if o.strip()],
+        "http://localhost:5173",
+    ])))
     
 
 
