@@ -17,6 +17,9 @@ NEW_INVOICE_COLUMNS = {
     "payment_proof_submitted_at": "TIMESTAMP",
     "paid_at": "TIMESTAMP",
     "last_reminder_sent_at": "TIMESTAMP",
+    "first_viewed_at": "TIMESTAMP",
+    "last_viewed_at": "TIMESTAMP",
+    "view_count": "INTEGER DEFAULT 0 NOT NULL",
 }
 
 NEW_TENANT_COLUMNS = {

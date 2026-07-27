@@ -24,6 +24,13 @@ def get_public_invoice(public_token):
         return jsonify({"error": "Invoice not found"}), 404
     invoice = refresh_overdue_status(invoice)
 
+    now = datetime.utcnow()
+    if invoice.first_viewed_at is None:
+        invoice.first_viewed_at = now
+    invoice.last_viewed_at = now
+    invoice.view_count = (invoice.view_count or 0) + 1
+    db.session.commit()
+
     data = invoice.to_dict()
     data["bank_transfer_details"] = get_bank_transfer_details(invoice.tenant)
     data["supplier"] = _supplier_info(invoice.tenant)

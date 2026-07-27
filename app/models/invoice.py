@@ -40,6 +40,9 @@ class Invoice(db.Model):
     payment_proof_submitted_at = db.Column(db.DateTime, nullable=True)
     paid_at            = db.Column(db.DateTime, nullable=True)
     last_reminder_sent_at = db.Column(db.DateTime, nullable=True)
+    first_viewed_at    = db.Column(db.DateTime, nullable=True)
+    last_viewed_at     = db.Column(db.DateTime, nullable=True)
+    view_count         = db.Column(db.Integer, default=0, nullable=False)
     created_at         = db.Column(db.DateTime, server_default=db.func.now())
     
     def to_dict(self):
@@ -69,6 +72,9 @@ class Invoice(db.Model):
           "payment_proof_submitted_at": self.payment_proof_submitted_at.isoformat() if self.payment_proof_submitted_at else None,
           "paid_at":            self.paid_at.isoformat() if self.paid_at else None,
           "last_reminder_sent_at": self.last_reminder_sent_at.isoformat() if self.last_reminder_sent_at else None,
+          "first_viewed_at":    self.first_viewed_at.isoformat() if self.first_viewed_at else None,
+          "last_viewed_at":     self.last_viewed_at.isoformat() if self.last_viewed_at else None,
+          "view_count":         self.view_count,
           "created_at":         self.created_at.isoformat()
         }
       
