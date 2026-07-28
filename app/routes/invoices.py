@@ -1,3 +1,4 @@
+from datetime import datetime
 from flask import Blueprint, request, jsonify, g, Response
 from ..extensions import db
 from ..models import Invoice, PdfDownload
@@ -95,6 +96,8 @@ def download_invoice_pdf(invoice_id):
     pdf_bytes = generate_invoice_pdf(invoice, supplier, public_url)
 
     db.session.add(PdfDownload(tenant_id=g.tenant.id, invoice_id=invoice.id))
+    if invoice.pdf_downloaded_at is None:
+        invoice.pdf_downloaded_at = datetime.utcnow()
     db.session.commit()
 
     return Response(

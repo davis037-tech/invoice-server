@@ -43,6 +43,7 @@ class Invoice(db.Model):
     first_viewed_at    = db.Column(db.DateTime, nullable=True)
     last_viewed_at     = db.Column(db.DateTime, nullable=True)
     view_count         = db.Column(db.Integer, default=0, nullable=False)
+    pdf_downloaded_at  = db.Column(db.DateTime, nullable=True)
     created_at         = db.Column(db.DateTime, server_default=db.func.now())
     
     def to_dict(self):
@@ -75,6 +76,7 @@ class Invoice(db.Model):
           "first_viewed_at":    self.first_viewed_at.isoformat() if self.first_viewed_at else None,
           "last_viewed_at":     self.last_viewed_at.isoformat() if self.last_viewed_at else None,
           "view_count":         self.view_count,
+          "pdf_downloaded_at":  self.pdf_downloaded_at.isoformat() if self.pdf_downloaded_at else None,
           "created_at":         self.created_at.isoformat()
         }
       
