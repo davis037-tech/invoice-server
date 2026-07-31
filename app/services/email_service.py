@@ -66,3 +66,25 @@ def payment_received_email(invoice):
       <strong>{invoice.number}</strong>. Thank you!</p>
     """
     return send_email(invoice.client_email, subject, html)
+
+
+def upgrade_request_submitted_email(admin_email, tenant, upgrade_request):
+    """Notifies you (superadmin) that a tenant wants to upgrade and paid by transfer."""
+    subject = f"Upgrade request: {tenant.name} wants {upgrade_request.requested_plan}"
+    html = f"""
+      <p><strong>{tenant.name}</strong> requested an upgrade to
+      <strong>{upgrade_request.requested_plan}</strong>.</p>
+      {f'<p>Note: {upgrade_request.note}</p>' if upgrade_request.note else ''}
+      <p>Review it in the Admin panel to approve or reject.</p>
+    """
+    return send_email(admin_email, subject, html)
+
+
+def upgrade_approved_email(owner_email, tenant, plan):
+    """Notifies the tenant their upgrade was approved."""
+    subject = f"You're now on {plan}"
+    html = f"""
+      <p>Your account <strong>{tenant.name}</strong> has been upgraded to
+      <strong>{plan}</strong>. Your new limits are active now.</p>
+    """
+    return send_email(owner_email, subject, html)

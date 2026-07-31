@@ -7,6 +7,8 @@ from .plan_limit import PlanLimit
 from .pdf_download import PdfDownload
 from .pdf_plan_limit import PdfPlanLimit
 from .login_event import LoginEvent
+from .upgrade_request import UpgradeRequest
+from .platform_settings import PlatformSettings
 
 
 

@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_app
 from ..extensions import db
-from ..models import Tenant, User, Invoice, PlanLimit, PdfPlanLimit, LoginEvent
+from ..models import Tenant, User, Invoice, PlanLimit, PdfPlanLimit, LoginEvent, UpgradeRequest, PlatformSettings
 from ..middleware.auth import require_auth, require_superadmin
 from ..services.quota import quota_status, all_plan_limits, DEFAULT_PLAN_WEEKLY_LIMITS
 from ..services.pdf_quota import pdf_quota_status, all_pdf_plan_limits, DEFAULT_PDF_WEEKLY_LIMITS
+from ..services.email_service import upgrade_approved_email, EmailError
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -128,6 +129,94 @@ def login_activity():
             "unique_this_week": len({e.email for e in events}),
         }
     }), 200
+
+
+@admin_bp.get("/platform-settings")
+@require_auth
+@require_superadmin
+def get_platform_settings():
+    return jsonify({"data": PlatformSettings.get().to_dict()}), 200
+
+
+@admin_bp.put("/platform-settings")
+@require_auth
+@require_superadmin
+def update_platform_settings():
+    settings = PlatformSettings.get()
+    data = request.get_json() or {}
+    for key in ("bank_name", "account_name", "account_number", "routing_number", "swift_code"):
+        if key in data:
+            setattr(settings, key, data[key])
+    db.session.commit()
+    return jsonify({"data": settings.to_dict()}), 200
+
+
+@admin_bp.get("/upgrade-requests")
+@require_auth
+@require_superadmin
+def list_upgrade_requests():
+    status_filter = request.args.get("status", "PENDING")
+    query = UpgradeRequest.query
+    if status_filter != "all":
+        query = query.filter_by(status=status_filter)
+    requests_ = query.order_by(UpgradeRequest.created_at.desc()).all()
+
+    data = []
+    for r in requests_:
+        tenant = Tenant.query.get(r.tenant_id)
+        owner = User.query.filter_by(tenant_id=r.tenant_id).order_by(User.created_at.asc()).first()
+        d = r.to_dict()
+        d["tenant_name"] = tenant.name if tenant else None
+        d["owner_email"] = owner.email if owner else None
+        d["current_plan"] = tenant.plan.value if tenant else None
+        data.append(d)
+
+    return jsonify({"data": data, "meta": {"total": len(data)}}), 200
+
+
+@admin_bp.post("/upgrade-requests/<request_id>/approve")
+@require_auth
+@require_superadmin
+def approve_upgrade_request(request_id):
+    req = UpgradeRequest.query.get(request_id)
+    if not req:
+        return jsonify({"error": "Request not found"}), 404
+    if req.status != "PENDING":
+        return jsonify({"error": f"This request is already {req.status.lower()}."}), 400
+
+    tenant = Tenant.query.get(req.tenant_id)
+    if not tenant:
+        return jsonify({"error": "Tenant not found"}), 404
+
+    tenant.plan = req.requested_plan
+    req.status = "APPROVED"
+    req.reviewed_at = datetime.utcnow()
+    db.session.commit()
+
+    try:
+        owner = User.query.filter_by(tenant_id=tenant.id).order_by(User.created_at.asc()).first()
+        if owner and current_app.config.get("RESEND_API_KEY"):
+            upgrade_approved_email(owner.email, tenant, req.requested_plan)
+    except EmailError as e:
+        current_app.logger.error(f"upgrade_approved_email failed: {e}")
+
+    return jsonify({"data": req.to_dict()}), 200
+
+
+@admin_bp.post("/upgrade-requests/<request_id>/reject")
+@require_auth
+@require_superadmin
+def reject_upgrade_request(request_id):
+    req = UpgradeRequest.query.get(request_id)
+    if not req:
+        return jsonify({"error": "Request not found"}), 404
+    if req.status != "PENDING":
+        return jsonify({"error": f"This request is already {req.status.lower()}."}), 400
+
+    req.status = "REJECTED"
+    req.reviewed_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"data": req.to_dict()}), 200
 
 
 @admin_bp.get("/tenants")

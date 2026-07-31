@@ -1,11 +1,75 @@
 from datetime import datetime
-from flask import Blueprint, jsonify, g, current_app
+from flask import Blueprint, jsonify, g, current_app, request
 from ..extensions import db
-from ..models import Invoice
+from ..models import Invoice, UpgradeRequest, User, PlatformSettings
 from ..middleware.auth import require_auth, attach_tenant
-from ..services.email_service import payment_received_email, EmailError
+from ..services.email_service import payment_received_email, upgrade_request_submitted_email, EmailError
+from ..services.pdf_quota import DEFAULT_PDF_WEEKLY_LIMITS
+from ..services.quota import DEFAULT_PLAN_WEEKLY_LIMITS
 
 billing_bp = Blueprint("billing", __name__)
+
+
+@billing_bp.get("/platform-bank-details")
+@require_auth
+@attach_tenant
+def get_platform_bank_details():
+    """Your own bank details, shown to tenants who want to upgrade by transfer."""
+    settings = PlatformSettings.get()
+    return jsonify({
+        "data": {
+            "bank_details": settings.formatted(),
+            "plan_limits": {p: {"invoices": DEFAULT_PLAN_WEEKLY_LIMITS[p], "pdfs": DEFAULT_PDF_WEEKLY_LIMITS[p]} for p in DEFAULT_PLAN_WEEKLY_LIMITS},
+        }
+    }), 200
+
+
+@billing_bp.post("/upgrade-request")
+@require_auth
+@attach_tenant
+def submit_upgrade_request():
+    data = request.get_json() or {}
+    requested_plan = data.get("requested_plan")
+    if requested_plan not in ("PRO", "TEAM"):
+        return jsonify({"error": "requested_plan must be PRO or TEAM"}), 422
+
+    note = (data.get("note") or "").strip() or None
+    image_base64 = data.get("image_base64")
+    if image_base64 and len(image_base64) > 3_500_000:
+        return jsonify({"error": "That photo is too large."}), 422
+    if not note and not image_base64:
+        return jsonify({"error": "Add a reference note or a receipt photo."}), 422
+
+    existing = UpgradeRequest.query.filter_by(tenant_id=g.tenant.id, status="PENDING").first()
+    if existing:
+        return jsonify({"error": "You already have a pending upgrade request awaiting review."}), 400
+
+    req = UpgradeRequest(
+        tenant_id=g.tenant.id,
+        requested_plan=requested_plan,
+        note=note,
+        image_base64=image_base64,
+    )
+    db.session.add(req)
+    db.session.commit()
+
+    try:
+        superadmin_email = current_app.config.get("SUPERADMIN_EMAIL")
+        if superadmin_email and current_app.config.get("RESEND_API_KEY"):
+            upgrade_request_submitted_email(superadmin_email, g.tenant, req)
+    except EmailError as e:
+        current_app.logger.error(f"upgrade_request_submitted_email failed: {e}")
+
+    return jsonify({"data": req.to_dict()}), 201
+
+
+@billing_bp.get("/upgrade-request")
+@require_auth
+@attach_tenant
+def get_my_upgrade_request():
+    """The tenant's own most recent upgrade request, if any — so the UI can show its status."""
+    req = UpgradeRequest.query.filter_by(tenant_id=g.tenant.id).order_by(UpgradeRequest.created_at.desc()).first()
+    return jsonify({"data": req.to_dict() if req else None}), 200
 
 
 @billing_bp.get("/invoices/awaiting-confirmation")
