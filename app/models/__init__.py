@@ -9,6 +9,7 @@ from .pdf_plan_limit import PdfPlanLimit
 from .login_event import LoginEvent
 from .upgrade_request import UpgradeRequest
 from .platform_settings import PlatformSettings
+from .demo_invoice_log import DemoInvoiceLog
 
 
 
