@@ -4,8 +4,9 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from marshmallow import ValidationError
 from sqlalchemy.exc import IntegrityError
 from ..extensions import db
-from ..models import Tenant, User, Settings, LoginEvent
+from ..models import Tenant, User, Settings, LoginEvent, PasswordResetToken
 from ..schema.auth import RegisterSchema, LoginSchema
+from ..services.email_service import password_reset_email, EmailError
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -93,6 +94,63 @@ def refresh():
     user_id = get_jwt_identity()
     access = create_access_token(identity=user_id)
     return jsonify({"access": access}),200
+
+
+@auth_bp.post("/forgot-password")
+def forgot_password():
+    """
+    Always responds with the same generic message regardless of whether
+    the email exists — otherwise this endpoint could be used to check
+    which emails have accounts (user enumeration).
+    """
+    data = request.get_json() or {}
+    email = (data.get("email") or "").strip()
+    generic_response = {"message": "If an account exists for that email, a reset link has been sent."}
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if user:
+        reset_token = PasswordResetToken(user_id=user.id)
+        db.session.add(reset_token)
+        db.session.commit()
+
+        try:
+            if current_app.config.get("RESEND_API_KEY"):
+                frontend_url = current_app.config.get("FRONTEND_URL", "").rstrip("/")
+                reset_url = f"{frontend_url}/reset-password.html?token={reset_token.token}"
+                password_reset_email(user.email, reset_url)
+        except EmailError as e:
+            current_app.logger.error(f"password_reset_email failed: {e}")
+
+    return jsonify(generic_response), 200
+
+
+@auth_bp.post("/reset-password")
+def reset_password():
+    data = request.get_json() or {}
+    token_str = (data.get("token") or "").strip()
+    new_password = data.get("password") or ""
+
+    if not token_str or not new_password:
+        return jsonify({"error": "Token and new password are required"}), 400
+    if len(new_password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+
+    reset_token = PasswordResetToken.query.filter_by(token=token_str).first()
+    if not reset_token or not reset_token.is_valid():
+        return jsonify({"error": "This reset link is invalid or has expired. Request a new one."}), 400
+
+    user = User.query.get(reset_token.user_id)
+    if not user:
+        return jsonify({"error": "This reset link is invalid or has expired. Request a new one."}), 400
+
+    user.set_password(new_password)
+    reset_token.used_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({"message": "Password updated. You can now sign in."}), 200
     
 
 
