@@ -21,6 +21,7 @@ NEW_INVOICE_COLUMNS = {
     "last_viewed_at": "TIMESTAMP",
     "view_count": "INTEGER DEFAULT 0 NOT NULL",
     "pdf_downloaded_at": "TIMESTAMP",
+    "business_profile_id": "VARCHAR",
 }
 
 NEW_TENANT_COLUMNS = {

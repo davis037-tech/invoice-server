@@ -1,13 +1,14 @@
 from datetime import datetime
-from flask import Blueprint, request, jsonify, g, Response
+from flask import Blueprint, request, jsonify, g, Response, current_app
 from ..extensions import db
 from ..models import Invoice, PdfDownload
 from ..schema.invoice import InvoiceSchema
 from ..middleware.auth import require_auth, attach_tenant
-from ..services.invoice_service import build_invoice, calculate_totals, get_bank_transfer_details, refresh_overdue_status
+from ..services.invoice_service import build_invoice, calculate_totals, get_bank_transfer_details, refresh_overdue_status, get_supplier_info
 from ..services.quota import quota_status
 from ..services.pdf_quota import pdf_quota_status
 from ..services.pdf_service import generate_invoice_pdf
+from ..services.email_service import overdue_reminder_email, EmailError
 
 invoices_bp = Blueprint("invoices", __name__)
 
@@ -54,6 +55,15 @@ def create_invoice():
         return jsonify(errors), 422
 
     loaded = schema.load(data)
+
+    if loaded.get("business_profile_id"):
+        from ..models import BusinessProfile
+        profile = BusinessProfile.query.filter_by(
+            id=loaded["business_profile_id"], tenant_id=g.tenant.id
+        ).first()
+        if not profile:
+            return jsonify({"error": "That business profile wasn't found."}), 422
+
     invoice = build_invoice(g.tenant.id, loaded)
     db.session.add(invoice)
     db.session.commit()
@@ -83,13 +93,7 @@ def download_invoice_pdf(invoice_id):
             "quota": status,
         }), 403
 
-    settings = g.tenant.settings
-    supplier = {
-        "business_name": (settings.business_name if settings else None) or g.tenant.name,
-        "business_address": settings.business_address if settings else None,
-    }
-    frontend_url = None
-    from flask import current_app
+    supplier = get_supplier_info(invoice)
     frontend_url = current_app.config.get("FRONTEND_URL", "").rstrip("/")
     public_url = f"{frontend_url}/i.html?token={invoice.public_token}" if invoice.public_token else None
 
@@ -153,6 +157,16 @@ def update_invoice(invoice_id):
         if key in loaded:
             setattr(invoice, key, loaded[key])
 
+    if "business_profile_id" in loaded:
+        if loaded["business_profile_id"]:
+            from ..models import BusinessProfile
+            profile = BusinessProfile.query.filter_by(
+                id=loaded["business_profile_id"], tenant_id=g.tenant.id
+            ).first()
+            if not profile:
+                return jsonify({"error": "That business profile wasn't found."}), 422
+        invoice.business_profile_id = loaded["business_profile_id"]
+
     db.session.commit()
     return jsonify({"data": invoice.to_dict()}), 200
 
@@ -165,9 +179,9 @@ def send_invoice(invoice_id):
     if not invoice:
         return jsonify({"error": "Invoice not found"}), 404
 
-    if not get_bank_transfer_details(g.tenant):
+    if not get_bank_transfer_details(invoice):
         return jsonify({
-            "error": "Add your bank transfer details in Settings before sending an invoice."
+            "error": "Add your bank transfer details in Settings (or on this invoice's business profile) before sending an invoice."
         }), 422
 
     invoice.status = "SENT"
@@ -210,5 +224,40 @@ def cancel_invoice(invoice_id):
         return jsonify({"error": f"Invoice is already {invoice.status.value.lower()}."}), 400
 
     invoice.status = "CANCELLED"
+    db.session.commit()
+    return jsonify({"data": invoice.to_dict()}), 200
+
+
+@invoices_bp.post("/<invoice_id>/send-reminder")
+@require_auth
+@attach_tenant
+def send_manual_reminder(invoice_id):
+    """
+    On-demand version of the automatic overdue reminder — sends
+    immediately, no cooldown, since a person explicitly asked for it.
+    Only makes sense for SENT/OVERDUE invoices.
+    """
+    invoice = Invoice.query.filter_by(id=invoice_id, tenant_id=g.tenant.id).first()
+    if not invoice:
+        return jsonify({"error": "Invoice not found"}), 404
+
+    invoice = refresh_overdue_status(invoice)
+
+    if invoice.status.value not in ("SENT", "OVERDUE"):
+        return jsonify({"error": f"Can't send a reminder for a {invoice.status.value.lower()} invoice."}), 400
+
+    if not current_app.config.get("RESEND_API_KEY"):
+        return jsonify({"error": "Email isn't configured yet — set RESEND_API_KEY to enable reminders."}), 503
+
+    frontend_url = current_app.config.get("FRONTEND_URL", "").rstrip("/")
+    public_url = f"{frontend_url}/i.html?token={invoice.public_token}"
+
+    try:
+        overdue_reminder_email(invoice, public_url)
+    except EmailError as e:
+        current_app.logger.error(f"Manual reminder failed for invoice {invoice.id}: {e}")
+        return jsonify({"error": f"Couldn't send the reminder email: {e}"}), 502
+
+    invoice.last_reminder_sent_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"data": invoice.to_dict()}), 200

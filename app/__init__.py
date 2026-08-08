@@ -7,6 +7,7 @@ from .routes.invoices import invoices_bp
 from .routes.billing import billing_bp  
 from .routes.public import public_bp
 from .routes.settings import settings_bp
+from .routes.business_profiles import business_profiles_bp
 from .routes.admin import admin_bp
 from .routes.cron import cron_bp
 
@@ -31,6 +32,7 @@ def create_app():
     app.register_blueprint(public_bp,     url_prefix="/v1/public")
     app.register_blueprint(billing_bp,     url_prefix="/v1/billing")
     app.register_blueprint(settings_bp,    url_prefix="/v1/settings")
+    app.register_blueprint(business_profiles_bp, url_prefix="/v1/business-profiles")
     app.register_blueprint(admin_bp,    url_prefix="/v1/admin")
     app.register_blueprint(cron_bp,    url_prefix="/v1/cron")
     

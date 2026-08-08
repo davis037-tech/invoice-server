@@ -7,7 +7,7 @@ from ..services.email_service import overdue_reminder_email, EmailError
 
 cron_bp = Blueprint("cron", __name__)
 
-REMINDER_COOLDOWN_DAYS = 6  # don't re-remind the same invoice more than ~weekly
+REMINDER_COOLDOWN_DAYS = 6  # don't re-remind the same invoice more than ~weekly, for the *automatic* job
 
 
 def _check_secret():

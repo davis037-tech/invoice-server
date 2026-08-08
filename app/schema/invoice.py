@@ -18,6 +18,7 @@ class InvoiceSchema(Schema):
     payment_terms  = fields.Int(load_default=30)
     due_date       = fields.DateTime(load_default=None)
     notes          = fields.Str(load_default=None)
+    business_profile_id = fields.Str(load_default=None)
 
 
 # Cap the base64 receipt image at ~3.5MB of encoded text, which covers a

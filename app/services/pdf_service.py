@@ -1,9 +1,10 @@
+import base64
 from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
+    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image,
 )
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_RIGHT, TA_LEFT
@@ -70,10 +71,31 @@ def generate_invoice_pdf(invoice, supplier, public_url):
         Paragraph("DUE DATE", label_style), Paragraph(_date(invoice.due_date), value_style),
     ]
 
-    right_col = [
-        Paragraph("SUPPLIER", right_label),
-        Paragraph(supplier.get("business_name") or "", party_name),
-    ]
+    right_col = []
+    logo_data_uri = supplier.get("business_logo")
+    if logo_data_uri and logo_data_uri.startswith("data:"):
+        try:
+            header, encoded = logo_data_uri.split(",", 1)
+            img_bytes = base64.b64decode(encoded)
+            img_buf = BytesIO(img_bytes)
+            # Constrain to a reasonable header logo size — width capped,
+            # height follows aspect ratio via reportlab's own scaling.
+            logo_img = Image(img_buf, width=32 * mm, height=16 * mm, kind="proportional")
+            logo_wrapper = Table([[logo_img]], colWidths=[content_width * 0.5 - 14 * mm])
+            logo_wrapper.setStyle(TableStyle([
+                ("ALIGN", (0, 0), (0, 0), "RIGHT"),
+                ("LEFTPADDING", (0, 0), (0, 0), 0),
+                ("RIGHTPADDING", (0, 0), (0, 0), 0),
+                ("TOPPADDING", (0, 0), (0, 0), 0),
+                ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+            ]))
+            right_col.append(logo_wrapper)
+            right_col.append(Spacer(1, 8))
+        except Exception:
+            pass  # a corrupt/unsupported logo shouldn't break PDF generation
+
+    right_col.append(Paragraph("SUPPLIER", right_label))
+    right_col.append(Paragraph(supplier.get("business_name") or "", party_name))
     if supplier.get("business_address"):
         right_col.append(Paragraph(supplier["business_address"], right_muted))
     right_col.append(Spacer(1, 12))

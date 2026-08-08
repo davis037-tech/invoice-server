@@ -18,6 +18,7 @@ class Invoice(db.Model):
     id                = db.Column(db.String, primary_key=True, default=lambda: str(uuid4()))
     tenant_id         = db.Column(db.String, ForeignKey("tenants.id"), nullable=False)
     client_id         = db.Column(db.String, ForeignKey("clients.id"), nullable=True)
+    business_profile_id = db.Column(db.String, ForeignKey("business_profiles.id"), nullable=True)
     client_name        = db.Column(db.String, nullable=False)
     client_email       = db.Column(db.String, nullable=False)
     client_address     = db.Column(db.Text, nullable=True)
@@ -51,6 +52,7 @@ class Invoice(db.Model):
           "id":                 self.id,
           "tenant_id":          self.tenant_id,
           "client_id":          self.client_id,
+          "business_profile_id": self.business_profile_id,
           "client_name":        self.client_name,
           "client_email":       self.client_email,
           "client_address":     self.client_address,

@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request, current_app, Response
 from ..extensions import db
 from ..models import Invoice, User, Tenant, DemoInvoiceLog
 from ..schema.invoice import PaymentProofSchema
-from ..services.invoice_service import refresh_overdue_status, get_bank_transfer_details, build_invoice
+from ..services.invoice_service import refresh_overdue_status, get_bank_transfer_details, build_invoice, get_supplier_info
 from ..services.email_service import payment_proof_submitted_email, EmailError
 from ..services.pdf_service import generate_invoice_pdf
 
@@ -29,14 +29,6 @@ def _get_demo_tenant():
     return tenant
 
 
-def _supplier_info(tenant):
-    settings = tenant.settings
-    return {
-        "business_name": (settings.business_name if settings else None) or tenant.name,
-        "business_address": settings.business_address if settings else None,
-    }
-
-
 @public_bp.get("/invoices/<public_token>")
 def get_public_invoice(public_token):
     invoice = Invoice.query.filter_by(public_token=public_token).first()
@@ -52,8 +44,8 @@ def get_public_invoice(public_token):
     db.session.commit()
 
     data = invoice.to_dict()
-    data["bank_transfer_details"] = get_bank_transfer_details(invoice.tenant)
-    data["supplier"] = _supplier_info(invoice.tenant)
+    data["bank_transfer_details"] = get_bank_transfer_details(invoice)
+    data["supplier"] = get_supplier_info(invoice)
     return jsonify({"data": data}), 200
 
 
@@ -93,8 +85,8 @@ def submit_payment_proof(public_token):
         current_app.logger.error(f"payment_proof_submitted_email failed: {e}")
 
     data = invoice.to_dict()
-    data["bank_transfer_details"] = get_bank_transfer_details(invoice.tenant)
-    data["supplier"] = _supplier_info(invoice.tenant)
+    data["bank_transfer_details"] = get_bank_transfer_details(invoice)
+    data["supplier"] = get_supplier_info(invoice)
     return jsonify({"data": data}), 200
 
 

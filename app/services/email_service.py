@@ -88,3 +88,13 @@ def upgrade_approved_email(owner_email, tenant, plan):
       <strong>{plan}</strong>. Your new limits are active now.</p>
     """
     return send_email(owner_email, subject, html)
+
+
+def password_reset_email(user_email, reset_url):
+    subject = "Reset your Ledger password"
+    html = f"""
+      <p>We received a request to reset your Ledger password.</p>
+      <p><a href="{reset_url}">Click here to set a new password</a></p>
+      <p>This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+    """
+    return send_email(user_email, subject, html)

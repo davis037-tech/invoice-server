@@ -54,6 +54,7 @@ def build_invoice(tenant_id, data):
         id=invoice_id,
         tenant_id=tenant_id,
         client_id=client_id,
+        business_profile_id=data.get("business_profile_id"),
         client_name=client_name,
         client_email=client_email,
         client_address=client_address,
@@ -98,20 +99,63 @@ def refresh_overdue_status(invoices):
     return items[0] if single else items
 
 
-def get_bank_transfer_details(tenant):
+def get_supplier_info(invoice):
     """
-    Returns the tenant's bank transfer details, formatted for display on an
-    invoice. Payment method is manual bank transfer, so there's no external
-    API call and no payment link to generate — the customer pays directly
+    Returns {business_name, business_address, business_logo} for display
+    on an invoice — from the invoice's linked BusinessProfile if it has
+    one, otherwise the tenant's default Settings/name. Mirrors the
+    profile-first, tenant-fallback pattern used by get_bank_transfer_details.
+    """
+    from ..models import BusinessProfile
+
+    if invoice.business_profile_id:
+        profile = BusinessProfile.query.get(invoice.business_profile_id)
+        if profile:
+            return {
+                "business_name": profile.business_name or invoice.tenant.name,
+                "business_address": profile.business_address,
+                "business_logo": profile.business_logo,
+            }
+
+    tenant = invoice.tenant
+    settings = tenant.settings if tenant else None
+    return {
+        "business_name": (settings.business_name if settings else None) or (tenant.name if tenant else None),
+        "business_address": settings.business_address if settings else None,
+        "business_logo": settings.business_logo if settings else None,
+    }
+
+
+def get_bank_transfer_details(invoice_or_tenant):
+    """
+    Returns bank transfer details formatted for display on an invoice.
+    Payment method is manual bank transfer, so there's no external API
+    call and no payment link to generate — the customer pays directly
     using these details, and the tenant marks the invoice paid themselves
     once they confirm receipt (or after reviewing submitted proof).
 
-    Prefers the structured fields (bank_name, account_name, etc.) added
-    after the free-text payment_info field; falls back to that legacy
-    field for any tenant who saved details before the structured fields
-    existed and hasn't touched Settings since.
+    Accepts either an Invoice (preferred — checks its linked
+    BusinessProfile first, for tenants invoicing under multiple brands)
+    or a Tenant directly (uses the tenant's default Settings). Falls back
+    to the tenant's Settings if the invoice has no profile attached, and
+    falls back further to the legacy free-text payment_info field for
+    any tenant who saved details before the structured fields existed.
     """
-    settings = tenant.settings
+    from ..models import Invoice as InvoiceModel, BusinessProfile
+
+    if isinstance(invoice_or_tenant, InvoiceModel):
+        invoice = invoice_or_tenant
+        if invoice.business_profile_id:
+            profile = BusinessProfile.query.get(invoice.business_profile_id)
+            if profile:
+                formatted = profile.formatted_bank_details()
+                if formatted:
+                    return formatted
+        tenant = invoice.tenant
+    else:
+        tenant = invoice_or_tenant
+
+    settings = tenant.settings if tenant else None
     if not settings:
         return None
 
